@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Stock Chatbot</title>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<style>
+    body{
+        background-image: url('../static/image-1.avif');
+        background-repeat: no-repeat;
+        background-size: cover;
+    }
+    
+    h1 {
+       color: aliceblue;
+        
+    } 
+    form{
+        color: aliceblue;
+    }
+    script{
+        color: aliceblue;
+    }
+    #advice p {
+        color: white;
+        font-size: 20px;
+    }
+    
+</style>
+<body>
+    <script> </script>
+    <h1><center>Bull's AI</center> </h1>
+
+    <form id="stockForm">
+       <center> Enter stock name: <input type="text" name="ticker" id="ticker" placeholder="STOCK"><br>
+       <br> <button type="submit">Get Advice</button></center>
+    </form>
+
+    <div id="advice"></div>
+
+    <script>
+        $(document).ready(function() {
+            $('#stockForm').submit(function(event) {
+                event.preventDefault();
+                var ticker = $('#ticker').val();
+
+                $.ajax({
+                    type: 'POST',
+                    url: '/stock_advice',
+                    data: { 'ticker': ticker },
+                    success: function(response) {
+                        if (response.error) {
+                            $('#advice').html("<p style='color: red;'>" + response.error + "</p>");
+                        } else {
+                            $('#advice').html("<p>" + response.advice + "</p>");
+                        }
+                    },
+                    error: function(error) {
+                        $('#advice').html("<p style='color: red;'>An error occurred.</p>");
+                    }
+                });
+            });
+        });
+    </script>
+
+</body>
+</html>
