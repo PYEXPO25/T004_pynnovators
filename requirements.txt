@@ -1,0 +1,8 @@
+flask 
+dotenv
+google-generativeai
+flask-cors
+yfinance
+pandas
+datetime  
+ 
