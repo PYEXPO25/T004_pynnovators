@@ -75,6 +75,56 @@
             width: 3rem;
             height: 3rem;
         }
+        .ai-insights-section {
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .ai-insights-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+        .ai-insights-content {
+            white-space: pre-line;
+            line-height: 1.6;
+        }
+        .ai-badge {
+            background-color: #8e44ad;
+            color: white;
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+        .timestamp {
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+        .buy-signal {
+            background-color: #16c784;
+            color: white;
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .sell-signal {
+            background-color: #ea3943;
+            color: white;
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            font-weight: 500;
+        }
+        .hold-signal {
+            background-color: #f7b924;
+            color: white;
+            padding: 0.3rem 0.6rem;
+            border-radius: 4px;
+            font-weight: 500;
+        }
     </style>
 </head>
 <body>
@@ -167,6 +217,25 @@
                 <div id="volumeChart"></div>
             </div>
         </div>
+        
+        <!-- AI Insights Section (Hidden initially) -->
+        <div id="aiInsightsSection" class="ai-insights-section" style="display: none;">
+            <div class="ai-insights-header">
+                <h3>AI-Powered Market Insights <span class="ai-badge">AI</span></h3>
+                <span id="insightsTimestamp" class="timestamp">Last updated: --</span>
+            </div>
+            
+            <div id="insightsLoading" class="text-center py-4">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="mt-2">Analyzing market data...</p>
+            </div>
+            
+            <div id="insightsContent" class="ai-insights-content" style="display: none;">
+                <!-- Will be filled by JavaScript -->
+            </div>
+        </div>
     </div>
     
     <script>
@@ -231,14 +300,39 @@
                         return;
                     }
                     
-                    updateStockInfo(data);
+                    // Update stock info card
+                    $('#stockName').text(data.name || symbol);
+                    $('#stockExchange').text(exchange.toUpperCase());
+                    $('#stockSymbol').text(symbol);
+                    $('#stockPrice').text(`₹ ${data.price.toFixed(2)}`);
+                    
+                    // Format price change
+                    const changeText = `${data.change > 0 ? '+' : ''}${data.change.toFixed(2)} (${data.changePercent.toFixed(2)}%)`;
+                    const changeClass = data.change >= 0 ? 'price-up' : 'price-down';
+                    $('#priceChange').text(changeText).removeClass('price-up price-down').addClass(changeClass);
+                    
+                    // Update other stats
+                    $('#stockOpen').text(`₹ ${data.open ? data.open.toFixed(2) : 'N/A'}`);
+                    $('#stockPrevClose').text(`₹ ${data.previousClose ? data.previousClose.toFixed(2) : 'N/A'}`);
+                    $('#stockDayHigh').text(`₹ ${data.dayHigh ? data.dayHigh.toFixed(2) : 'N/A'}`);
+                    $('#stockDayLow').text(`₹ ${data.dayLow ? data.dayLow.toFixed(2) : 'N/A'}`);
+                    $('#stockYearHigh').text(`₹ ${data.yearHigh ? data.yearHigh.toFixed(2) : 'N/A'}`);
+                    $('#stockYearLow').text(`₹ ${data.yearLow ? data.yearLow.toFixed(2) : 'N/A'}`);
+                    $('#stockVolume').text(data.volume ? formatNumber(data.volume) : 'N/A');
+                    $('#stockMarketCap').text(data.marketCap ? formatCurrency(data.marketCap) : 'N/A');
+                    
+                    // Show the stock info card
                     $('#stockInfoCard').show();
-                    $('#chartSection').show();
+                    
+                    // Fetch chart data
                     fetchChartData(exchange, symbol, currentPeriod);
+                    
+                    // Fetch AI insights
+                    fetchAIInsights(exchange, symbol);
                 },
                 error: function(xhr, status, error) {
-                    console.error('Error fetching stock data:', error);
-                    alert('Failed to fetch stock data. Please try again.');
+                    alert('Error fetching stock data. Please try again.');
+                    console.error(error);
                     hideLoading();
                 }
             });
@@ -257,58 +351,63 @@
                     }
                     
                     chartData = data;
+                    
+                    // Show chart section
+                    $('#chartSection').show();
+                    
+                    // Update charts
                     updateCharts(data);
                     hideLoading();
                 },
                 error: function(xhr, status, error) {
-                    console.error('Error fetching chart data:', error);
-                    alert('Failed to fetch chart data. Please try again.');
+                    alert('Error fetching chart data. Please try again.');
+                    console.error(error);
                     hideLoading();
                 }
             });
         }
         
-        // Update stock information card
-        function updateStockInfo(data) {
-            $('#stockName').text(data.name || data.symbol);
-            $('#stockExchange').text(data.exchange);
-            $('#stockSymbol').text(data.symbol);
+        // Fetch AI insights
+        function fetchAIInsights(exchange, symbol) {
+            $('#aiInsightsSection').show();
+            $('#insightsLoading').show();
+            $('#insightsContent').hide();
             
-            // Format price with commas
-            const formattedPrice = formatCurrency(data.price);
-            $('#stockPrice').text(`₹ ${formattedPrice}`);
-            
-            // Format change and change percentage
-            const changeClass = data.change >= 0 ? 'price-up' : 'price-down';
-            const changeSign = data.change >= 0 ? '+' : '';
-            const changeText = `${changeSign}${data.change.toFixed(2)} (${changeSign}${data.changePercent.toFixed(2)}%)`;
-            $('#priceChange').html(`<span class="${changeClass}">${changeText}</span>`);
-            
-            // Update other stock metrics
-            $('#stockOpen').text(formatCurrency(data.open));
-            $('#stockPrevClose').text(formatCurrency(data.previousClose));
-            $('#stockDayHigh').text(formatCurrency(data.dayHigh));
-            $('#stockDayLow').text(formatCurrency(data.dayLow));
-            $('#stockYearHigh').text(formatCurrency(data.yearHigh));
-            $('#stockYearLow').text(formatCurrency(data.yearLow));
-            
-            // Format volume and market cap
-            $('#stockVolume').text(formatNumber(data.volume));
-            
-            if (data.marketCap) {
-                const marketCapText = formatMarketCap(data.marketCap);
-                $('#stockMarketCap').text(marketCapText);
-            } else {
-                $('#stockMarketCap').text('N/A');
-            }
+            $.ajax({
+                url: `/${exchange}/${symbol}/insights`,
+                method: 'GET',
+                success: function(data) {
+                    if (data.error) {
+                        $('#insightsLoading').hide();
+                        $('#insightsContent').html(`<p class="text-danger">Unable to generate insights: ${data.error}</p>`).show();
+                        return;
+                    }
+                    
+                    // Update timestamp
+                    $('#insightsTimestamp').text(`Last updated: ${data.timestamp || 'N/A'}`);
+                    
+                    // Process analysis content to add styling
+                    let formattedContent = data.analysis;
+                    
+                    // Add styling for buy/sell/hold signals
+                    formattedContent = formattedContent.replace(/\b(buy|strong buy)\b/gi, '<span class="buy-signal">$&</span>');
+                    formattedContent = formattedContent.replace(/\b(sell|strong sell)\b/gi, '<span class="sell-signal">$&</span>');
+                    formattedContent = formattedContent.replace(/\b(hold|neutral)\b/gi, '<span class="hold-signal">$&</span>');
+                    
+                    $('#insightsContent').html(formattedContent);
+                    $('#insightsLoading').hide();
+                    $('#insightsContent').show();
+                },
+                error: function(xhr, status, error) {
+                    $('#insightsLoading').hide();
+                    $('#insightsContent').html('<p class="text-danger">Error generating insights. Please try again.</p>').show();
+                    console.error(error);
+                }
+            });
         }
         
-        // Update charts with new data
+        // Update charts with data
         function updateCharts(data) {
-            const isUp = data.prices[data.prices.length - 1] >= data.prices[0];
-            const chartColor = isUp ? '#16c784' : '#ea3943';
-            
-            // Destroy existing charts if any
             if (priceChart) {
                 priceChart.destroy();
             }
@@ -316,266 +415,217 @@
                 volumeChart.destroy();
             }
             
-            // Create price chart based on selected chart type
             if (currentChartType === 'line') {
-                createLineChart(data, chartColor);
+                // Line chart for price
+                const priceOptions = {
+                    series: [{
+                        name: 'Price',
+                        data: data.prices
+                    }],
+                    chart: {
+                        type: 'line',
+                        height: 350,
+                        toolbar: {
+                            show: true
+                        },
+                        zoom: {
+                            enabled: true
+                        }
+                    },
+                    dataLabels: {
+                        enabled: false
+                    },
+                    stroke: {
+                        curve: 'straight',
+                        width: 2
+                    },
+                    title: {
+                        text: 'Stock Price',
+                        align: 'left'
+                    },
+                    grid: {
+                        row: {
+                            colors: ['#f3f3f3', 'transparent'],
+                            opacity: 0.5
+                        },
+                    },
+                    xaxis: {
+                        categories: data.dates,
+                        tickAmount: 10
+                    },
+                    yaxis: {
+                        title: {
+                            text: 'Price (₹)'
+                        },
+                        labels: {
+                            formatter: function(val) {
+                                return val.toFixed(2);
+                            }
+                        }
+                    },
+                    tooltip: {
+                        y: {
+                            formatter: function(val) {
+                                return '₹ ' + val.toFixed(2);
+                            }
+                        }
+                    },
+                    colors: ['#0d6efd']
+                };
+                
+                priceChart = new ApexCharts(document.querySelector("#priceChart"), priceOptions);
+                priceChart.render();
             } else {
-                createCandlestickChart(data);
+                // Candlestick chart
+                const ohlcData = data.ohlc.map(item => ({
+                    x: new Date(item.timestamp),
+                    y: [item.open, item.high, item.low, item.close]
+                }));
+                
+                const priceOptions = {
+                    series: [{
+                        name: 'candle',
+                        data: ohlcData
+                    }],
+                    chart: {
+                        type: 'candlestick',
+                        height: 350,
+                        toolbar: {
+                            show: true
+                        }
+                    },
+                    title: {
+                        text: 'Stock Price (OHLC)',
+                        align: 'left'
+                    },
+                    xaxis: {
+                        type: 'datetime',
+                        labels: {
+                            formatter: function(val) {
+                                if (currentPeriod === '1d' || currentPeriod === '1w') {
+                                    return new Date(val).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                                } else {
+                                    return new Date(val).toLocaleDateString();
+                                }
+                            }
+                        }
+                    },
+                    yaxis: {
+                        tooltip: {
+                            enabled: true
+                        },
+                        labels: {
+                            formatter: function(val) {
+                                return '₹ ' + val.toFixed(2);
+                            }
+                        }
+                    },
+                    tooltip: {
+                        x: {
+                            formatter: function(val) {
+                                if (currentPeriod === '1d' || currentPeriod === '1w') {
+                                    return new Date(val).toLocaleTimeString();
+                                } else {
+                                    return new Date(val).toLocaleDateString();
+                                }
+                            }
+                        }
+                    },
+                    plotOptions: {
+                        candlestick: {
+                            colors: {
+                                upward: '#16c784',
+                                downward: '#ea3943'
+                            }
+                        }
+                    }
+                };
+                
+                priceChart = new ApexCharts(document.querySelector("#priceChart"), priceOptions);
+                priceChart.render();
             }
             
-            // Create volume chart
-            createVolumeChart(data, chartColor);
-        }
-        
-        // Create line chart
-        function createLineChart(data, chartColor) {
-            const options = {
-                series: [{
-                    name: 'Price',
-                    data: data.prices
-                }],
-                chart: {
-                    type: 'line',
-                    height: 350,
-                    toolbar: {
-                        show: true,
-                        tools: {
-                            download: true,
-                            selection: true,
-                            zoom: true,
-                            zoomin: true,
-                            zoomout: true,
-                            pan: true,
-                            reset: true
-                        }
-                    }
-                },
-                colors: [chartColor],
-                stroke: {
-                    curve: 'smooth',
-                    width: 2
-                },
-                xaxis: {
-                    categories: data.dates,
-                    labels: {
-                        rotate: -45,
-                        style: {
-                            fontSize: '12px'
-                        }
-                    }
-                },
-                yaxis: {
-                    labels: {
-                        formatter: function(value) {
-                            return '₹' + value.toFixed(2);
-                        }
-                    }
-                },
-                title: {
-                    text: `${currentSymbol} Price (${currentPeriod})`,
-                    align: 'left'
-                },
-                tooltip: {
-                    y: {
-                        formatter: function(value) {
-                            return '₹' + value.toFixed(2);
-                        }
-                    }
-                },
-                grid: {
-                    borderColor: '#e0e0e0',
-                    strokeDashArray: 5
-                },
-                markers: {
-                    size: 4,
-                    colors: [chartColor],
-                    strokeWidth: 0
-                }
-            };
-
-            priceChart = new ApexCharts(document.querySelector("#priceChart"), options);
-            priceChart.render();
-        }
-        
-        // Create candlestick chart
-        function createCandlestickChart(data) {
-            // Prepare OHLC data
-            const seriesData = data.ohlc.map(item => ({
-                x: new Date(item.timestamp),
-                y: [item.open, item.high, item.low, item.close]
-            }));
-            
-            const options = {
-                series: [{
-                    name: 'candle',
-                    data: seriesData
-                }],
-                chart: {
-                    type: 'candlestick',
-                    height: 350,
-                    toolbar: {
-                        show: true,
-                        tools: {
-                            download: true,
-                            selection: true,
-                            zoom: true,
-                            zoomin: true,
-                            zoomout: true,
-                            pan: true,
-                            reset: true
-                        }
-                    }
-                },
-                title: {
-                    text: `${currentSymbol} OHLC (${currentPeriod})`,
-                    align: 'left'
-                },
-                xaxis: {
-                    type: 'datetime',
-                    labels: {
-                        datetimeUTC: false
-                    }
-                },
-                yaxis: {
-                    tooltip: {
-                        enabled: true
-                    },
-                    labels: {
-                        formatter: function(value) {
-                            return '₹' + value.toFixed(2);
-                        }
-                    }
-                },
-                plotOptions: {
-                    candlestick: {
-                        colors: {
-                            upward: '#16c784',
-                            downward: '#ea3943'
-                        }
-                    }
-                },
-                tooltip: {
-                    x: {
-                        format: 'dd MMM HH:mm'
-                    }
-                }
-            };
-
-            priceChart = new ApexCharts(document.querySelector("#priceChart"), options);
-            priceChart.render();
-        }
-        
-        // Create volume chart
-        function createVolumeChart(data, chartColor) {
-            const options = {
+            // Volume chart
+            const volumeOptions = {
                 series: [{
                     name: 'Volume',
                     data: data.volumes
                 }],
                 chart: {
                     type: 'bar',
-                    height: 160,
+                    height: 250,
                     toolbar: {
                         show: false
                     }
                 },
-                colors: [chartColor],
-                plotOptions: {
-                    bar: {
-                        columnWidth: '70%'
-                    }
+                dataLabels: {
+                    enabled: false
+                },
+                title: {
+                    text: 'Trading Volume',
+                    align: 'left'
                 },
                 xaxis: {
                     categories: data.dates,
-                    labels: {
-                        show: false
-                    }
+                    tickAmount: 10
                 },
                 yaxis: {
+                    title: {
+                        text: 'Volume'
+                    },
                     labels: {
-                        formatter: function(value) {
-                            return formatShortNumber(value);
+                        formatter: function(val) {
+                            return formatNumber(val);
                         }
                     }
-                },
-                title: {
-                    text: 'Volume',
-                    align: 'left'
                 },
                 tooltip: {
                     y: {
-                        formatter: function(value) {
-                            return formatNumber(value);
+                        formatter: function(val) {
+                            return formatNumber(val);
                         }
                     }
                 },
-                grid: {
-                    borderColor: '#e0e0e0',
-                    strokeDashArray: 5
-                }
+                colors: ['#6c757d']
             };
-
-            volumeChart = new ApexCharts(document.querySelector("#volumeChart"), options);
+            
+            volumeChart = new ApexCharts(document.querySelector("#volumeChart"), volumeOptions);
             volumeChart.render();
         }
         
-        // Helper function to format currency with commas
-        function formatCurrency(value) {
-            if (value === undefined || value === null) return 'N/A';
-            return value.toLocaleString('en-IN', { 
-                maximumFractionDigits: 2,
-                minimumFractionDigits: 2
-            });
-        }
-        
-        // Helper function to format numbers with commas
-        function formatNumber(value) {
-            if (value === undefined || value === null) return 'N/A';
-            return value.toLocaleString('en-IN');
-        }
-        
-        // Helper function to format large numbers as K, M, B
-        function formatShortNumber(value) {
-            if (value === undefined || value === null) return 'N/A';
+        // Utility functions
+        function formatNumber(num) {
+            if (!num) return 'N/A';
             
-            if (value >= 1000000000) {
-                return (value / 1000000000).toFixed(2) + 'B';
-            } else if (value >= 1000000) {
-                return (value / 1000000).toFixed(2) + 'M';
-            } else if (value >= 1000) {
-                return (value / 1000).toFixed(2) + 'K';
+            if (num >= 10000000) {
+                return (num / 10000000).toFixed(2) + ' Cr';
+            } else if (num >= 100000) {
+                return (num / 100000).toFixed(2) + ' L';
+            } else if (num >= 1000) {
+                return (num / 1000).toFixed(2) + ' K';
+            } else {
+                return num.toString();
             }
-            return value.toString();
         }
         
-        // Helper function to format market cap
-        function formatMarketCap(value) {
-            if (value === undefined || value === null) return 'N/A';
+        function formatCurrency(num) {
+            if (!num) return 'N/A';
             
-            if (value >= 10000000000000) { // >= 10 trillion
-                return (value / 1000000000000).toFixed(2) + ' Trillion';
-            } else if (value >= 1000000000000) { // >= 1 trillion
-                return (value / 1000000000000).toFixed(2) + ' Trillion';
-            } else if (value >= 10000000000) { // >= 10 billion
-                return (value / 1000000000).toFixed(2) + ' Billion';
-            } else if (value >= 1000000000) { // >= 1 billion
-                return (value / 1000000000).toFixed(2) + ' Billion';
-            } else if (value >= 10000000) { // >= 10 million
-                return (value / 1000000).toFixed(2) + ' Million';
-            } else if (value >= 1000000) { // >= 1 million
-                return (value / 1000000).toFixed(2) + ' Million';
-            } else if (value >= 1000) {
-                return (value / 1000).toFixed(2) + ' Thousand';
+            if (num >= 10000000000) {
+                return '₹ ' + (num / 10000000000).toFixed(2) + ' B';
+            } else if (num >= 10000000) {
+                return '₹ ' + (num / 10000000).toFixed(2) + ' Cr';
+            } else if (num >= 100000) {
+                return '₹ ' + (num / 100000).toFixed(2) + ' L';
+            } else {
+                return '₹ ' + num.toFixed(2);
             }
-            return value.toString();
         }
         
-        // Show loading overlay
         function showLoading() {
             $('#loadingOverlay').show();
         }
         
-        // Hide loading overlay
         function hideLoading() {
             $('#loadingOverlay').hide();
         }

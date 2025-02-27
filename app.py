@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template
+from flask import Flask, jsonify, render_template, request
 import requests
 from flask_cors import CORS
 import yfinance as yf
@@ -6,9 +6,14 @@ import pandas as pd
 from datetime import datetime, timedelta
 import json
 import time
+import google.generativeai as genai
 
 app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)  # Enable CORS for frontend requests
+
+# Configure Gemini API
+genai.configure(api_key="AIzaSyAN5LdfkT3LvOsZefvNaE2OuLo7ugl-2-c")  # Replace with actual API key in production
+gemini_model = genai.GenerativeModel('gemini-1.5-pro')
 
 # Cache mechanism to reduce API calls
 cache = {}
@@ -177,7 +182,7 @@ def get_nse_history(symbol, period):
                 date_str = index.strftime("%d/%m")
                 
             dates.append(date_str)
-            prices.append(row["Close"])
+            prices.append(float(row["Close"]))
             volumes.append(int(row["Volume"]) if not pd.isna(row["Volume"]) else 0)
             
             # Add OHLC data for candlestick
@@ -258,7 +263,7 @@ def get_bse_history(symbol, period):
                 date_str = index.strftime("%d/%m")
                 
             dates.append(date_str)
-            prices.append(row["Close"])
+            prices.append(float(row["Close"]))
             volumes.append(int(row["Volume"]) if not pd.isna(row["Volume"]) else 0)
             
             # Add OHLC data for candlestick
@@ -285,6 +290,108 @@ def get_bse_history(symbol, period):
     except Exception as e:
         return {"error": f"Error fetching BSE historical data: {str(e)}"}
 
+# Function to get AI insights using Gemini API
+def get_ai_insights(symbol, exchange, stock_data, history_data):
+    cache_key = f"ai_insights_{symbol}_{exchange}"
+    cached_data = get_cache(cache_key)
+    if cached_data:
+        return cached_data
+    
+    try:
+        # Prepare stock data summary with safe type conversion
+        current_price = float(stock_data.get("price", 0)) if stock_data.get("price") is not None else "N/A"
+        prev_close = float(stock_data.get("previousClose", 0)) if stock_data.get("previousClose") is not None else "N/A"
+        day_high = float(stock_data.get("dayHigh", 0)) if stock_data.get("dayHigh") is not None else "N/A"
+        day_low = float(stock_data.get("dayLow", 0)) if stock_data.get("dayLow") is not None else "N/A"
+        year_high = float(stock_data.get("yearHigh", 0)) if stock_data.get("yearHigh") is not None else "N/A"
+        year_low = float(stock_data.get("yearLow", 0)) if stock_data.get("yearLow") is not None else "N/A"
+        volume = stock_data.get("volume", "N/A")
+        change_percent = float(stock_data.get("changePercent", 0)) if stock_data.get("changePercent") is not None else "N/A"
+        
+        # Calculate some technical indicators if history data available
+        technical_signals = []
+        if (history_data and "prices" in history_data and 
+            len(history_data["prices"]) > 14 and 
+            isinstance(current_price, (int, float))):
+            
+            prices = history_data["prices"]
+            # Simple Moving Average (SMA) 5-day and 14-day
+            sma5 = sum(prices[-5:]) / 5 if len(prices) >= 5 else None
+            sma14 = sum(prices[-14:]) / 14 if len(prices) >= 14 else None
+            
+            if sma5 and sma14:
+                if sma5 > sma14:
+                    technical_signals.append("Short-term SMA above long-term SMA (bullish)")
+                else:
+                    technical_signals.append("Short-term SMA below long-term SMA (bearish)")
+                    
+            # Price relative to SMA
+            if sma14 and current_price > sma14:
+                technical_signals.append("Price above 14-day SMA (bullish)")
+            elif sma14:
+                technical_signals.append("Price below 14-day SMA (bearish)")
+                
+            # Check if price near support/resistance
+            if (isinstance(year_low, (int, float)) and 
+                year_low > 0 and 
+                current_price < (year_low * 1.05)):
+                technical_signals.append("Price near yearly support")
+                
+            if (isinstance(year_high, (int, float)) and 
+                year_high > 0 and 
+                current_price > (year_high * 0.95)):
+                technical_signals.append("Price near yearly resistance")
+        
+        # Format values for display in the prompt
+        current_price_str = f"₹{current_price}" if isinstance(current_price, (int, float)) else current_price
+        prev_close_str = f"₹{prev_close}" if isinstance(prev_close, (int, float)) else prev_close
+        day_high_str = f"₹{day_high}" if isinstance(day_high, (int, float)) else day_high
+        day_low_str = f"₹{day_low}" if isinstance(day_low, (int, float)) else day_low
+        year_high_str = f"₹{year_high}" if isinstance(year_high, (int, float)) else year_high
+        year_low_str = f"₹{year_low}" if isinstance(year_low, (int, float)) else year_low
+        change_percent_str = f"{change_percent}%" if isinstance(change_percent, (int, float)) else change_percent
+        
+        # Construct a prompt for Gemini
+        prompt = f"""
+        Analyze the following Indian stock ({exchange}:{symbol}) based on the provided data:
+        
+        Current Price: {current_price_str}
+        Previous Close: {prev_close_str}
+        Day Range: {day_low_str} - {day_high_str}
+        52-Week Range: {year_low_str} - {year_high_str}
+        Change %: {change_percent_str}
+        Volume: {volume}
+        
+        Technical Indicators:
+        {', '.join(technical_signals) if technical_signals else 'No technical indicators available'}
+        
+        Based on current market conditions and recent news, provide a concise analysis with:
+        1. Key strengths (merits) of investing in this stock
+        2. Potential risks (demerits)
+        3. Technical analysis recommendation (buy, sell, or hold)
+        4. Fundamental analysis insights
+        5. Ideal entry and exit price points, if applicable
+        
+        Format your response as clear sections. Keep the analysis concise but insightful.
+        enclose all the bold words and characters in <b></b> tags.
+        instead of using stars for points, enclose them in <ul></ul> tags.
+        """
+        
+        # Call Gemini API
+        response = gemini_model.generate_content(prompt)
+        
+        # Parse and structure the response
+        insights = {
+            "analysis": response.text,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        }
+        
+        set_cache(cache_key, insights)
+        return insights
+        
+    except Exception as e:
+        return {"error": f"Error generating AI insights: {str(e)}"}
+
 # API Route for stock quotes
 @app.route('/<exchange>/<symbol>/quote', methods=['GET'])
 def get_stock_quote(exchange, symbol):
@@ -305,6 +412,34 @@ def get_stock_history(exchange, symbol, period):
     else:
         return jsonify({"error": "Invalid exchange. Use 'nse' or 'bse'."})
 
+# API Route for AI insights
+@app.route('/<exchange>/<symbol>/insights', methods=['GET'])
+def get_stock_insights(exchange, symbol):
+    if exchange.lower() not in ('nse', 'bse'):
+        return jsonify({"error": "Invalid exchange. Use 'nse' or 'bse'."})
+    
+    symbol = symbol.upper()
+    
+    # Get stock data
+    if exchange.lower() == 'nse':
+        stock_data = get_nse_quote(symbol)
+    else:
+        stock_data = get_bse_quote(symbol)
+    
+    if "error" in stock_data:
+        return jsonify({"error": f"Could not get stock data: {stock_data['error']}"})
+    
+    # Get historical data (1 month for analysis)
+    if exchange.lower() == 'nse':
+        history_data = get_nse_history(symbol, "1m")
+    else:
+        history_data = get_bse_history(symbol, "1m")
+    
+    # Get AI insights
+    insights = get_ai_insights(symbol, exchange, stock_data, history_data)
+    
+    return jsonify(insights)
+
 # Basic compatibility with original routes
 @app.route('/nse/<symbol>', methods=['GET'])
 def nse_price(symbol):
@@ -323,4 +458,4 @@ def home():
 
 # Run Flask app
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(debug=True) 
